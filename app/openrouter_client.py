@@ -11,6 +11,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_KEY_URL = "https://openrouter.ai/api/v1/key"
 
 APP_REFERER = "http://localhost"
 APP_TITLE = "My Personal LLM Website"
@@ -33,10 +34,32 @@ class OpenRouterError(Exception):
         self.response_body = response_body
 
 
+def _clean_api_key(value: str) -> str:
+    key = str(value or "").strip().strip("\"'")
+    if key.lower().startswith("bearer "):
+        key = key[7:].strip()
+    return key
+
+
+def get_api_key_source() -> str:
+    hardcoded_key = _clean_api_key(HARDCODED_OPENROUTER_API_KEY)
+    if hardcoded_key and hardcoded_key != "...":
+        return "hardcoded"
+
+    env_key = _clean_api_key(os.getenv("OPENROUTER_API_KEY", ""))
+    if env_key and env_key != "...":
+        return "environment"
+
+    return "missing"
+
+
 def get_api_key() -> str:
-    api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
-    if not api_key or api_key == "...":
-        api_key = HARDCODED_OPENROUTER_API_KEY.strip()
+    # For this demo, prefer the hardcoded key when it is filled in. That avoids
+    # stale local .env or Render environment variables accidentally winning.
+    if get_api_key_source() == "hardcoded":
+        api_key = _clean_api_key(HARDCODED_OPENROUTER_API_KEY)
+    else:
+        api_key = _clean_api_key(os.getenv("OPENROUTER_API_KEY", ""))
 
     if not api_key or api_key == "...":
         raise OpenRouterError(
@@ -45,6 +68,27 @@ def get_api_key() -> str:
             "app/openrouter_client.py."
         )
     return api_key
+
+
+def get_masked_api_key_info() -> Dict[str, Any]:
+    source = get_api_key_source()
+    if source == "missing":
+        return {
+            "source": source,
+            "configured": False,
+            "length": 0,
+            "starts_with": "",
+            "ends_with": "",
+        }
+
+    key = get_api_key()
+    return {
+        "source": source,
+        "configured": True,
+        "length": len(key),
+        "starts_with": key[:8],
+        "ends_with": key[-6:],
+    }
 
 
 def _headers() -> Dict[str, str]:
@@ -75,11 +119,31 @@ def _raise_for_http_error(response: requests.Response) -> None:
         return
 
     message = _extract_error_message(response)
+    if response.status_code == 401:
+        message = (
+            f"{message}. This usually means the API key being sent is invalid, "
+            "expired, disabled, copied incorrectly, or a stale env var is being used."
+        )
     raise OpenRouterError(
         f"OpenRouter request failed with HTTP {response.status_code}: {message}",
         status_code=response.status_code,
         response_body=response.text[:1000],
     )
+
+
+def validate_api_key(timeout: int = 20) -> Dict[str, Any]:
+    try:
+        response = requests.get(
+            OPENROUTER_KEY_URL,
+            headers=_headers(),
+            timeout=timeout,
+        )
+        _raise_for_http_error(response)
+        return response.json()
+    except requests.RequestException as exc:
+        raise OpenRouterError(f"Could not validate OpenRouter API key: {exc}") from exc
+    except ValueError as exc:
+        raise OpenRouterError("OpenRouter returned invalid JSON for key validation.") from exc
 
 
 def fetch_models(timeout: int = 30) -> List[Dict[str, Any]]:
