@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Local LLM Chat</title>
+  <style>
+    :root {
+      --bg: #f7f7f3;
+      --panel: #ffffff;
+      --panel-strong: #eff7f3;
+      --text: #1d2528;
+      --muted: #5c686c;
+      --line: #d9dfdc;
+      --accent: #167a6b;
+      --accent-dark: #0f5d52;
+      --warn: #986a17;
+      --error: #b42318;
+      --shadow: 0 14px 40px rgba(29, 37, 40, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        linear-gradient(120deg, rgba(22, 122, 107, 0.1), transparent 42%),
+        linear-gradient(260deg, rgba(152, 106, 23, 0.08), transparent 44%),
+        var(--bg);
+      font-family: "Segoe UI", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    textarea,
+    input {
+      font: inherit;
+    }
+
+    .app-shell {
+      display: grid;
+      grid-template-columns: 310px minmax(0, 1fr);
+      height: 100vh;
+      min-height: 640px;
+    }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding: 22px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.68);
+      backdrop-filter: blur(16px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-mark {
+      display: grid;
+      flex: 0 0 auto;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      color: white;
+      background: var(--accent);
+      border-radius: 8px;
+      font-weight: 750;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .brand p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .status-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-value {
+      color: var(--text);
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .model-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 190px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .model-pill {
+      overflow-wrap: anywhere;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-strong);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .field-label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 650;
+    }
+
+    .model-input {
+      width: 100%;
+      min-height: 40px;
+      padding: 9px 10px;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+      outline: none;
+    }
+
+    .model-input:focus,
+    .composer textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(22, 122, 107, 0.14);
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn {
+      min-height: 40px;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--text);
+      background: white;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+    }
+
+    .btn.primary {
+      color: white;
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .btn.primary:hover {
+      background: var(--accent-dark);
+    }
+
+    .btn:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+
+    .chat-pane {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      min-width: 0;
+      height: 100vh;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 26px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(247, 247, 243, 0.78);
+      backdrop-filter: blur(16px);
+    }
+
+    .topbar h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .topbar .subtle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .messages {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      overflow-y: auto;
+      padding: 28px clamp(18px, 5vw, 72px);
+    }
+
+    .message {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 760px);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .message.user {
+      justify-content: end;
+      grid-template-columns: minmax(0, 760px) 42px;
+    }
+
+    .avatar {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      border-radius: 8px;
+      color: white;
+      background: #29343a;
+      font-weight: 750;
+    }
+
+    .message.user .avatar {
+      grid-column: 2;
+      background: var(--accent);
+    }
+
+    .bubble {
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      box-shadow: 0 8px 28px rgba(29, 37, 40, 0.07);
+    }
+
+    .bubble h1,
+    .bubble h2,
+    .bubble h3 {
+      margin: 4px 0 10px;
+      line-height: 1.25;
+    }
+
+    .bubble h1 {
+      font-size: 24px;
+    }
+
+    .bubble h2 {
+      font-size: 20px;
+    }
+
+    .bubble h3 {
+      font-size: 17px;
+    }
+
+    .bubble p {
+      margin: 0 0 12px;
+    }
+
+    .bubble p:last-child,
+    .bubble ul:last-child,
+    .bubble ol:last-child,
+    .bubble pre:last-child {
+      margin-bottom: 0;
+    }
+
+    .bubble ul,
+    .bubble ol {
+      margin: 0 0 12px 22px;
+      padding: 0;
+    }
+
+    .bubble li {
+      margin: 5px 0;
+      padding-left: 2px;
+    }
+
+    .bubble code {
+      padding: 2px 5px;
+      border: 1px solid #d6ddd9;
+      border-radius: 5px;
+      background: #f2f5f3;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.92em;
+    }
+
+    .bubble pre {
+      overflow-x: auto;
+      margin: 0 0 12px;
+      padding: 12px;
+      border: 1px solid #d6ddd9;
+      border-radius: 8px;
+      background: #1f2a2d;
+      color: #eef6f2;
+      white-space: pre;
+    }
+
+    .bubble pre code {
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font-size: 13px;
+    }
+
+    .bubble blockquote {
+      margin: 0 0 12px;
+      padding: 8px 12px;
+      border-left: 4px solid var(--accent);
+      background: var(--panel-strong);
+      color: var(--muted);
+    }
+
+    .message.user .bubble {
+      grid-row: 1;
+      background: var(--panel-strong);
+    }
+
+    .meta {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .empty-state {
+      margin: auto;
+      max-width: 620px;
+      padding: 24px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .empty-state h2 {
+      margin: 0 0 8px;
+      color: var(--text);
+      font-size: 24px;
+    }
+
+    .composer-wrap {
+      padding: 18px clamp(18px, 5vw, 72px) 24px;
+      border-top: 1px solid var(--line);
+      background: rgba(247, 247, 243, 0.88);
+      backdrop-filter: blur(16px);
+    }
+
+    .composer {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 104px;
+      gap: 12px;
+      max-width: 920px;
+      margin: 0 auto;
+      align-items: end;
+    }
+
+    .composer textarea {
+      width: 100%;
+      min-height: 54px;
+      max-height: 180px;
+      resize: vertical;
+      padding: 14px 15px;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+      line-height: 1.45;
+      outline: none;
+    }
+
+    .notice {
+      min-height: 18px;
+      max-width: 920px;
+      margin: 10px auto 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .notice.error {
+      color: var(--error);
+    }
+
+    .notice.warn {
+      color: var(--warn);
+    }
+
+    @media (max-width: 820px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .chat-pane {
+        height: calc(100vh - 328px);
+        min-height: 560px;
+      }
+
+      .topbar {
+        padding: 14px 18px;
+      }
+
+      .message,
+      .message.user {
+        grid-template-columns: 34px minmax(0, 1fr);
+        justify-content: start;
+      }
+
+      .message.user .avatar {
+        grid-column: 1;
+      }
+
+      .message.user .bubble {
+        grid-column: 2;
+      }
+
+      .avatar {
+        width: 34px;
+        height: 34px;
+        font-size: 13px;
+      }
+
+      .composer {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">LLM</div>
+        <div>
+          <h1>Local LLM Chat</h1>
+          <p>Browser UI, Python backend, OpenRouter key kept server-side.</p>
+        </div>
+      </div>
+
+      <section class="status-panel" aria-label="Model status">
+        <div class="status-row">
+          <span>Working models</span>
+          <span class="status-value" id="modelCount">0</span>
+        </div>
+        <div class="status-row">
+          <span>Selected model</span>
+          <span class="status-value" id="selectedModel">Auto</span>
+        </div>
+        <div class="model-list" id="modelList">
+          <div class="model-pill">No checker results yet.</div>
+        </div>
+      </section>
+
+      <section class="controls" aria-label="Controls">
+        <label>
+          <div class="field-label">Optional model override</div>
+          <input class="model-input" id="modelOverride" placeholder="google/gemma-3-27b-it:free">
+        </label>
+        <div class="button-row">
+          <button class="btn" id="refreshModels" type="button">Refresh</button>
+          <button class="btn" id="checkModels" type="button">Check models</button>
+        </div>
+        <button class="btn" id="clearChat" type="button">Clear chat</button>
+      </section>
+    </aside>
+
+    <section class="chat-pane" aria-label="Chat">
+      <header class="topbar">
+        <div>
+          <h2>Chat</h2>
+          <div class="subtle" id="chatSubtitle">Ask a question to start.</div>
+        </div>
+      </header>
+
+      <section class="messages" id="messages">
+        <div class="empty-state" id="emptyState">
+          <h2>What do you want to ask?</h2>
+          <p>Use the model checker first if you want to discover which free OpenRouter models are working right now.</p>
+        </div>
+      </section>
+
+      <footer class="composer-wrap">
+        <form class="composer" id="chatForm">
+          <textarea id="prompt" rows="2" placeholder="Message your local LLM backend"></textarea>
+          <button class="btn primary" id="sendButton" type="submit">Send</button>
+        </form>
+        <div class="notice" id="notice"></div>
+      </footer>
+    </section>
+  </main>
+
+  <script>
+    const messagesEl = document.getElementById("messages");
+    const emptyState = document.getElementById("emptyState");
+    const promptEl = document.getElementById("prompt");
+    const noticeEl = document.getElementById("notice");
+    const sendButton = document.getElementById("sendButton");
+    const refreshButton = document.getElementById("refreshModels");
+    const checkButton = document.getElementById("checkModels");
+    const clearButton = document.getElementById("clearChat");
+    const modelOverrideEl = document.getElementById("modelOverride");
+    const modelCountEl = document.getElementById("modelCount");
+    const modelListEl = document.getElementById("modelList");
+    const selectedModelEl = document.getElementById("selectedModel");
+    const chatSubtitleEl = document.getElementById("chatSubtitle");
+
+    const conversation = [];
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function renderInlineMarkdown(value) {
+      let html = escapeHtml(value);
+      html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+      html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+      return html;
+    }
+
+    function renderMarkdown(markdown) {
+      const lines = String(markdown).replace(/\r\n/g, "\n").split("\n");
+      const html = [];
+      let paragraph = [];
+      let listType = null;
+      let inCodeBlock = false;
+      let codeLines = [];
+
+      function flushParagraph() {
+        if (!paragraph.length) {
+          return;
+        }
+        html.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+        paragraph = [];
+      }
+
+      function flushList() {
+        if (!listType) {
+          return;
+        }
+        html.push(`</${listType}>`);
+        listType = null;
+      }
+
+      function startList(type) {
+        if (listType === type) {
+          return;
+        }
+        flushList();
+        html.push(`<${type}>`);
+        listType = type;
+      }
+
+      for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith("```")) {
+          flushParagraph();
+          flushList();
+          if (inCodeBlock) {
+            html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+            codeLines = [];
+            inCodeBlock = false;
+          } else {
+            inCodeBlock = true;
+          }
+          continue;
+        }
+
+        if (inCodeBlock) {
+          codeLines.push(rawLine);
+          continue;
+        }
+
+        if (!trimmed) {
+          flushParagraph();
+          flushList();
+          continue;
+        }
+
+        const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
+        if (headingMatch) {
+          flushParagraph();
+          flushList();
+          const level = headingMatch[1].length;
+          html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+          continue;
+        }
+
+        const unorderedMatch = trimmed.match(/^[-*]\s+(.+)$/);
+        if (unorderedMatch) {
+          flushParagraph();
+          startList("ul");
+          html.push(`<li>${renderInlineMarkdown(unorderedMatch[1])}</li>`);
+          continue;
+        }
+
+        const orderedMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
+        if (orderedMatch) {
+          flushParagraph();
+          startList("ol");
+          html.push(`<li>${renderInlineMarkdown(orderedMatch[1])}</li>`);
+          continue;
+        }
+
+        const quoteMatch = trimmed.match(/^>\s+(.+)$/);
+        if (quoteMatch) {
+          flushParagraph();
+          flushList();
+          html.push(`<blockquote>${renderInlineMarkdown(quoteMatch[1])}</blockquote>`);
+          continue;
+        }
+
+        flushList();
+        paragraph.push(trimmed);
+      }
+
+      if (inCodeBlock) {
+        html.push(`<pre><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+      }
+
+      flushParagraph();
+      flushList();
+      return html.join("");
+    }
+
+    function setNotice(text, tone = "") {
+      noticeEl.textContent = text;
+      noticeEl.className = tone ? `notice ${tone}` : "notice";
+    }
+
+    function setBusy(isBusy, label = "Send") {
+      sendButton.disabled = isBusy;
+      refreshButton.disabled = isBusy;
+      checkButton.disabled = isBusy;
+      sendButton.textContent = isBusy ? "Thinking" : label;
+    }
+
+    function addMessage(role, text, meta = "") {
+      emptyState.style.display = "none";
+
+      const row = document.createElement("article");
+      row.className = `message ${role}`;
+
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      avatar.textContent = role === "user" ? "You" : "AI";
+
+      const bubble = document.createElement("div");
+      bubble.className = "bubble";
+      bubble.innerHTML = renderMarkdown(text);
+
+      if (meta) {
+        const metaEl = document.createElement("div");
+        metaEl.className = "meta";
+        metaEl.textContent = meta;
+        bubble.appendChild(metaEl);
+      }
+
+      row.appendChild(avatar);
+      row.appendChild(bubble);
+      messagesEl.appendChild(row);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function buildPromptWithContext(latestPrompt) {
+      const recent = conversation.slice(-8);
+      if (!recent.length) {
+        return latestPrompt;
+      }
+
+      const transcript = recent
+        .map((item) => `${item.role === "user" ? "User" : "Assistant"}: ${item.text}`)
+        .join("\n\n");
+
+      return `Continue this conversation naturally.\n\n${transcript}\n\nUser: ${latestPrompt}`;
+    }
+
+    async function refreshWorkingModels() {
+      const response = await fetch("/api/models/working");
+      if (!response.ok) {
+        throw new Error(`Could not load working models (${response.status})`);
+      }
+
+      const data = await response.json();
+      modelCountEl.textContent = data.num_working;
+      modelListEl.innerHTML = "";
+
+      if (!data.working_models.length) {
+        const empty = document.createElement("div");
+        empty.className = "model-pill";
+        empty.textContent = "No working models saved yet.";
+        modelListEl.appendChild(empty);
+      } else {
+        data.working_models.forEach((modelId) => {
+          const item = document.createElement("button");
+          item.className = "model-pill";
+          item.type = "button";
+          item.textContent = modelId;
+          item.addEventListener("click", () => {
+            modelOverrideEl.value = modelId;
+            selectedModelEl.textContent = modelId;
+          });
+          modelListEl.appendChild(item);
+        });
+      }
+    }
+
+    async function checkModels() {
+      setBusy(true);
+      checkButton.textContent = "Checking";
+      setNotice("Checking free OpenRouter models. This can take a little while.", "warn");
+
+      try {
+        const response = await fetch("/api/models/check");
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || `Model check failed (${response.status})`);
+        }
+        modelCountEl.textContent = data.num_working;
+        setNotice(`Checked ${data.num_checked} free models. ${data.num_working} are working.`);
+        await refreshWorkingModels();
+      } catch (error) {
+        setNotice(error.message, "error");
+      } finally {
+        setBusy(false);
+        checkButton.textContent = "Check models";
+      }
+    }
+
+    async function sendPrompt(event) {
+      event.preventDefault();
+
+      const rawPrompt = promptEl.value.trim();
+      if (!rawPrompt) {
+        setNotice("Type a message first.", "warn");
+        return;
+      }
+
+      const selectedModel = modelOverrideEl.value.trim();
+      selectedModelEl.textContent = selectedModel || "Auto";
+      promptEl.value = "";
+      addMessage("user", rawPrompt);
+      setBusy(true);
+      setNotice("Calling your local backend.");
+
+      try {
+        const payload = {
+          prompt: buildPromptWithContext(rawPrompt),
+          temperature: 0.2,
+          max_tokens: 500
+        };
+
+        if (selectedModel) {
+          payload.model = selectedModel;
+        }
+
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || `Chat failed (${response.status})`);
+        }
+
+        conversation.push({role: "user", text: rawPrompt});
+        conversation.push({role: "assistant", text: data.answer});
+        const fallback = data.fallback_used ? "Fallback used" : "Primary model used";
+        addMessage("assistant", data.answer, `${fallback}: ${data.model_used}`);
+        chatSubtitleEl.textContent = `Last model: ${data.model_used}`;
+        setNotice("");
+        await refreshWorkingModels();
+      } catch (error) {
+        addMessage("assistant", "I could not get a response from the backend.", error.message);
+        setNotice(error.message, "error");
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    modelOverrideEl.addEventListener("input", () => {
+      selectedModelEl.textContent = modelOverrideEl.value.trim() || "Auto";
+    });
+    refreshButton.addEventListener("click", () => {
+      refreshWorkingModels().catch((error) => setNotice(error.message, "error"));
+    });
+    checkButton.addEventListener("click", checkModels);
+    clearButton.addEventListener("click", () => {
+      conversation.length = 0;
+      messagesEl.querySelectorAll(".message").forEach((node) => node.remove());
+      emptyState.style.display = "";
+      chatSubtitleEl.textContent = "Ask a question to start.";
+      setNotice("");
+    });
+    document.getElementById("chatForm").addEventListener("submit", sendPrompt);
+    promptEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        document.getElementById("chatForm").requestSubmit();
+      }
+    });
+
+    refreshWorkingModels().catch(() => {
+      modelListEl.innerHTML = '<div class="model-pill">Could not load saved models.</div>';
+    });
+  </script>
+</body>
+</html>

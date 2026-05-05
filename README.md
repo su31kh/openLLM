@@ -1,73 +1,85 @@
-# YesBot Chat UI
+# My LLM Backend
 
-A responsive ChatGPT-style frontend template for an LLM web app.
+Local FastAPI backend for a personal website that calls OpenRouter while keeping the OpenRouter API key server-side only.
 
-For now, every user prompt returns:
+## Setup
 
-```text
-Yes
+Create a `.env` file in this folder:
+
+```env
+OPENROUTER_API_KEY=your_openrouter_api_key_here
 ```
 
-## Files
+Install dependencies:
 
-- `index.html` - page structure
-- `styles.css` - responsive desktop/mobile styling
-- `app.js` - chat state, local storage, prompt submit behavior, fake backend reply
-
-## Run locally
-
-Open `index.html` directly in your browser.
-
-For a local development server, you can also run:
-
-```bash
-python3 -m http.server 8080
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
-Then open:
+## Run
 
-```text
-http://localhost:8080
+Start the backend from the `my-llm-backend` folder:
+
+```powershell
+uvicorn app.main:app --reload
 ```
 
-## Deploy free with GitHub Pages
+The local chat website will run at `http://localhost:8000`.
 
-1. Create a new GitHub repository.
-2. Upload `index.html`, `styles.css`, `app.js`, and `README.md`.
-3. Go to **Settings > Pages**.
-4. Set the source to your main branch and root folder.
-5. Open the published `github.io` URL after GitHub finishes deploying.
+## Test
 
-## Connect your own backend later
+Open the chat page:
 
-In `app.js`, replace this function:
-
-```js
-async function getAssistantReply(userPrompt) {
-  await new Promise((resolve) => setTimeout(resolve, 450));
-  return "Yes";
-}
+```powershell
+curl http://localhost:8000/
 ```
 
-with your API call:
+Health check JSON:
 
-```js
-async function getAssistantReply(userPrompt) {
-  const response = await fetch("https://your-api.example.com/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: userPrompt }),
-  });
-
-  if (!response.ok) {
-    throw new Error("Backend request failed");
-  }
-
-  const data = await response.json();
-  return data.reply;
-}
+```powershell
+curl http://localhost:8000/api/health
 ```
 
-## Important security note
+Check currently working free OpenRouter models:
 
-Do not put private API keys in frontend JavaScript. Use your own backend or a serverless function to call paid LLM APIs safely.
+```powershell
+curl http://localhost:8000/api/models/check
+```
+
+Optional quick check filters:
+
+```powershell
+curl "http://localhost:8000/api/models/check?limit=5"
+curl "http://localhost:8000/api/models/check?contains=gemma"
+```
+
+List working models from the latest CSV:
+
+```powershell
+curl http://localhost:8000/api/models/working
+```
+
+Chat:
+
+```powershell
+curl -X POST http://localhost:8000/api/chat ^
+  -H "Content-Type: application/json" ^
+  -d "{\"prompt\":\"What is OFDM in telecommunications? Answer briefly.\"}"
+```
+
+Request a specific model:
+
+```powershell
+curl -X POST http://localhost:8000/api/chat ^
+  -H "Content-Type: application/json" ^
+  -d "{\"prompt\":\"Explain OFDM in simple words.\",\"model\":\"google/gemma-3-27b-it:free\",\"temperature\":0.2,\"max_tokens\":500}"
+```
+
+## Notes
+
+- The frontend should call this backend, not OpenRouter directly.
+- The OpenRouter API key is loaded only from `.env` on the server.
+- Free model status is saved to `data/openrouter_free_model_status.csv`.
+- If a selected chat model is unavailable or rate-limited, the backend tries the next working model from the latest model check.
