@@ -17,7 +17,7 @@ APP_TITLE = "My Personal LLM Website"
 
 # Optional temporary fallback for simple public demos.
 # Leave this empty when using .env locally or Render environment variables.
-HARDCODED_OPENROUTER_API_KEY = "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"
+HARDCODED_OPENROUTER_API_KEY = "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"
 
 
 class OpenRouterError(Exception):
