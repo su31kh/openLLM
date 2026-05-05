@@ -7,7 +7,12 @@ from fastapi.responses import FileResponse
 
 from .model_checker import check_free_models, load_working_models
 from .model_registry import select_best_working_model
-from .openrouter_client import OpenRouterError, chat_completion
+from .openrouter_client import (
+    OpenRouterError,
+    chat_completion,
+    get_masked_api_key_info,
+    validate_api_key,
+)
 from .schemas import ChatRequest, ChatResponse, ModelCheckResponse
 
 
@@ -61,6 +66,24 @@ def api_health():
     return {
         "status": "ok",
         "message": "Local LLM backend is running",
+    }
+
+
+@app.get("/api/key/debug")
+def api_key_debug():
+    return get_masked_api_key_info()
+
+
+@app.get("/api/key/validate")
+def api_key_validate():
+    try:
+        key_info = validate_api_key()
+    except OpenRouterError as exc:
+        raise HTTPException(status_code=401 if exc.status_code == 401 else 502, detail=exc.message) from exc
+
+    return {
+        "status": "ok",
+        "key": key_info.get("data", {}),
     }
 
 
@@ -127,3 +150,4 @@ def api_chat(chat_request: ChatRequest):
         status_code=503,
         detail="All candidate models failed. Last errors: " + " | ".join(errors[-3:]),
     )
+
