@@ -15,6 +15,10 @@ OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 APP_REFERER = "http://localhost"
 APP_TITLE = "My Personal LLM Website"
 
+# Optional temporary fallback for simple public demos.
+# Leave this empty when using .env locally or Render environment variables.
+HARDCODED_OPENROUTER_API_KEY = "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"
+
 
 class OpenRouterError(Exception):
     def __init__(
@@ -32,9 +36,13 @@ class OpenRouterError(Exception):
 def get_api_key() -> str:
     api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if not api_key or api_key == "...":
+        api_key = HARDCODED_OPENROUTER_API_KEY.strip()
+
+    if not api_key or api_key == "...":
         raise OpenRouterError(
-            "OPENROUTER_API_KEY is missing. Create my-llm-backend/.env with "
-            "OPENROUTER_API_KEY=your_key_here."
+            "OPENROUTER_API_KEY is missing. Set it in .env, set it as a Render "
+            "environment variable, or fill HARDCODED_OPENROUTER_API_KEY in "
+            "app/openrouter_client.py."
         )
     return api_key
 
